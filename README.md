@@ -1,3 +1,3 @@
 ## mailapageaday
 
-A play framework web application that mails a page of a document a day to the users subscribed
+A daemon written in Java that reads a document directory on user's machine once a day and mails a page of each document to the user.
