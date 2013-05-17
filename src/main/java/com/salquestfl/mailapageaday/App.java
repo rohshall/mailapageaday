@@ -61,14 +61,20 @@ public class App
                 existingFiles.add(fileName);
             }
         }
-        //Map<String, Integer> bookmarks = getBookmarks(conn);
+        Class.forName("org.sqlite.JDBC");
+        Connection conn = DriverManager.getConnection("jdbc:sqlite:mailapage.db");
+        createBookmarksTable(conn);
+        deleteOutdatedBookmarks(conn, existingFiles);
+        Map<String, Integer> bookmarks = getBookmarks(conn);
         List<String> newFiles = new ArrayList<String>();
         String dirPath = dir.getPath();
         for(String fileName : existingFiles) {
+            if (!bookmarks.containsKey(fileName)) {
+                newFiles.add(fileName);
+            }
             try {
                 File output = new File(dirPath + "/" + fileName + ".txt");
                 if (!output.exists()) {
-                    newFiles.add(fileName);
                     System.out.println("Converting " + fileName);
                     File input = new File(dirPath + "/" + fileName);
                     convertPdfToText(input, output);
@@ -77,12 +83,8 @@ public class App
                 System.out.println(e.toString());
             }
         }
-        Class.forName("org.sqlite.JDBC");
-        Connection conn = DriverManager.getConnection("jdbc:sqlite:mailapage.db");
-        createBookmarksTable(conn);
-        deleteOutdatedBookmarks(conn, existingFiles);
         addNewBookmarks(conn, newFiles);
-        Map<String, Integer> bookmarks = getBookmarks(conn);
+        bookmarks = getBookmarks(conn);
         for(Map.Entry<String, Integer> e : bookmarks.entrySet()) {
             System.out.println(e.getKey() + ": " + e.getValue());
         }
@@ -90,7 +92,7 @@ public class App
     }
 
     private static Map<String, Integer> getBookmarks(Connection conn) throws Exception {
-        String statement = "select `filename`, `page` from `bookmarks`";
+        String statement = "SELECT filename, page FROM bookmarks";
         PreparedStatement dbStatement = conn.prepareStatement(statement);
         Map<String, Integer> bookmarks = new HashMap<String, Integer>();
         ResultSet rs = dbStatement.executeQuery();
@@ -105,18 +107,19 @@ public class App
     private static void deleteOutdatedBookmarks(Connection conn, List<String> existingFiles) throws SQLException {
         if (!existingFiles.isEmpty()) {
             StringBuilder statement = new StringBuilder();
-            statement.append("delete from `bookmarks` where `filename` not in ( select `filename` from `bookmarks` `c` where \n");
+            statement.append("DELETE FROM bookmarks WHERE filename NOT IN ( SELECT filename FROM bookmarks c WHERE ");
             for (int index = 0; index < existingFiles.size(); index++) {
                 if (index > 0) {
-                    statement.append(" OR \n");
+                    statement.append(" OR ");
                 }
-                statement.append("`c`.`filename` = ?");
+                statement.append("c.filename = ?");
             }
             statement.append(" )");
             System.out.println("Delete Query: " + statement.toString());
             PreparedStatement dbStatement = conn.prepareStatement(statement.toString());
             int index = 1;
             for (String fileName : existingFiles) {
+                System.out.println(fileName);
                 dbStatement.setString(index, fileName);
                 index++;
             }
@@ -125,7 +128,7 @@ public class App
     }
 
     private static void createBookmarksTable(Connection conn) throws SQLException {
-        String statement = "create table if not exists `bookmarks` ( `id` INTEGER primary key autoincrement NOT NULL, `filename` TEXT NOT NULL, `page` INTEGER NOT NULL )";
+        String statement = "CREATE TABLE IF NOT EXISTS bookmarks ( id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, filename TEXT NOT NULL, page INTEGER NOT NULL )";
         PreparedStatement dbStatement = conn.prepareStatement(statement);
         dbStatement.executeUpdate();
     }
@@ -133,10 +136,10 @@ public class App
     private static void addNewBookmarks(Connection conn, List<String> newFiles) throws SQLException {
         if (!newFiles.isEmpty()) {
             StringBuilder statement = new StringBuilder();
-            statement.append("insert into `bookmarks` (`filename`, `page`) values \n");
+            statement.append("INSERT INTO bookmarks (filename, page) VALUES ");
             for (int index = 0; index < newFiles.size(); index++) {
                 if (index > 0) {
-                    statement.append(", \n");
+                    statement.append(", ");
                 }
                 statement.append("(?, 1)");
             }
@@ -144,6 +147,7 @@ public class App
             PreparedStatement dbStatement = conn.prepareStatement(statement.toString());
             int index = 1;
             for (String fileName : newFiles) {
+                System.out.println(fileName);
                 dbStatement.setString(index, fileName);
                 index++;
             }
